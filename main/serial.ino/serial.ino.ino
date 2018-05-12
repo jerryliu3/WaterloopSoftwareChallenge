@@ -6,6 +6,11 @@
 
 const int slave_address = 0x5A; // I2C address
 
+//Moving average
+const int RunningAverageCount = 3;
+float RunningAverageBuffer[RunningAverageCount];
+int NextRunningAverage;
+
 //Variables needed for signal reading and analysis
 long data;
 float acceleration [10];
@@ -17,6 +22,12 @@ int state;
 byte readings[32];
 int index = 0;
 
+//filters out changes faster that 5 Hz.
+float filterFrequency = 1.0;
+
+// create a one pole (RC) lowpass filter
+FilterOnePole lowpassFilter( LOWPASS, filterFrequency );   
+    
 //SimpleKalmanFilter(e_mea, e_est, q);
 //e_mea: Measurement Uncertainty 
 //e_est: Estimation Uncertainty 
@@ -33,8 +44,6 @@ const float totalDistance = 20000;
 bool breaksToggled = false;
 float oldTime = 0;
 
-
-// do something else
 
 //SimpleKalmanFilter simpleKalmanFilter(2, 2, 0.01);
 
@@ -135,15 +144,22 @@ void loop() {
     //#############################
     time_since_start_new = timeReading;
     newAcc = acceleration[9];
+    
     //float estimated_accel = simpleKalmanFilter.updateEstimate(newAcc);
-    // filters out changes faster that 5 Hz.
-    float filterFrequency = 5.0;
     
-    // create a one pole (RC) lowpass filter
-    FilterOnePole lowpassFilter( LOWPASS, filterFrequency );   
-    
+
     lowpassFilter.input(newAcc);
     float newAcc2 = lowpassFilter.output();
+
+//   float tempAverage= 0;
+//   for(int i = 0; i< 10; i++)
+//   {
+//      tempAverage += acceleration[i];
+//   }
+//   float newAcc2 = newAcc;
+//   newAcc = tempAverage/10;
+   
+   
     
     float dT= time_since_start_new-time_since_start_old;
     //Integrate for the velocity
@@ -166,7 +182,8 @@ void loop() {
       Wire.endTransmission(true);
       breaksToggled = true;
     }
-    /*Serial.print(state);
+    /*
+    Serial.print(state);
     Serial.print(" ");
     Serial.print(timeReading);
     Serial.print(" ");
@@ -178,7 +195,8 @@ void loop() {
     Serial.print(" ");
     Serial.print(newVel);    
     Serial.print(" ");
-    Serial.println(newDist); */   
+    Serial.println(newDist); 
+    */   
     
     
     
@@ -190,28 +208,48 @@ void loop() {
     // Inside the brackets, 200 is the size of the pool in bytes.
     // Don't forget to change this value to match your JSON document.
     // Use arduinojson.org/assistant to compute the capacity.
-    StaticJsonBuffer<200> jsonBuffer;
+    const size_t bufferSize = JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + 70;
+    DynamicJsonBuffer jsonBuffer(bufferSize);
   
   
     JsonObject& root = jsonBuffer.createObject();
+    JsonArray& data2 = root.createNestedArray("data");
+    data2.add(newVel);
+    data2.add(newDist);
+    data2.add(newAcc);
+    data2.add(newPropTemp);
+    data2.add(newBrakeTemp);
+    data2.add(newBoardTemp);
+    data2.add(state);
+    data2.add(timeReading);
+
+    byte valueArr[] = {newVel, newDist, newAcc, newPropTemp, newBrakeTemp, newBoardTemp, state, timeReading};
+    Serial.write(valueArr, 32);
   
     // Add values in the object
     //
     // Most of the time, you can rely on the implicit casts.
     // In other case, you can do root.set<long>("time", 1351824120);
-    root["velocity"] = newVel;
-    root["distance"] = newDist;
-    root["acceleration"] = newAcc;
-    root["propulsion_temp"] = newPropTemp;
-    root["breaking_temp"] = newBrakeTemp;
-    root["motherboard_temp"] = newBoardTemp;
-    root["pod_state"] = state;
-    root["time_since_start"]=timeReading;
+//    root["velocity"] = newVel;
+//    root["distance"] = newDist;
+//    root["acceleration"] = newAcc;
+//    root["propulsion_temp"] = newPropTemp;
+//    root["breaking_temp"] = newBrakeTemp;
+//    root["motherboard_temp"] = newBoardTemp;
+//    root["pod_state"] = state;
+//    root["time_since_start"]=timeReading;
   
     //Serial.println(newBrakeTemp);
     //Serial.println();
-    root.printTo(Serial);
-    Serial.println();
+    String output;
+    
+    root.printTo(output); //print as a string. May prevent errors with parsing. 
+    //Serial.println(output);
+    
+//    Serial.print(newAcc);
+//    Serial.print(",");
+//    Serial.print(newAcc2);
+//    Serial.println();
     oldTime = millis();
   }
 
