@@ -2,127 +2,114 @@
 #include <Wire.h>
 #include <math.h>
 
-//IMU variables
-const int MPU_addr=0x68;  // I2C address of the MPU-6050
-int motorPin = 11;
+const int slave_address = 0x5A; // I2C address
 
 //Variables needed for signal reading and analysis
-long tempAcX,tempAcY,tempAcZ,Tmp,tempGyX,tempGyY,tempGyZ;
-long GyZ [3];
-int numFoGPeaks = 0;
-boolean newSection = true;
-int zeroCounter = 0;
-
+long data;
+long first, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth, last;
+float acceleration [10];
+float brakeTemp [10];
+float propTemp [10];
+float boardTemp [10];
+float timeReading;
+int state;
+byte readings[32];
+int index = 0;
 //Arduino setup
 void setup() {
   Serial.begin(9600);
-  pinMode(motorPin, OUTPUT);
-  pinMode(LED_BUILTIN, OUTPUT);
-  analogWrite(motorPin, 0);
   Wire.begin(1);
-
-  Wire.beginTransmission(MPU_addr);
-  Wire.write(0x6B);  // PWR_MGMT_1 register
-  Wire.write(0);     // set to zero (wakes up the MPU-6050)
+  Wire.beginTransmission(slave_address);
+  Wire.write(0x56);  // start byte
+  Wire.write(0x00);     // make idle
+  Wire.write(0x23);
   Wire.endTransmission(true);
-  
-  //Read first three points
-  updateGy(0);
-  updateGy(1);
-  updateGy(2);
+  Wire.beginTransmission(slave_address);
+  Wire.write(0x56);  // start byte
+  Wire.write(0x01);     // make ready
+  Wire.write(0x23);
+  Wire.endTransmission(true);
+  //start acceleration
+  Wire.beginTransmission(slave_address);
+  Wire.write(0x56);  // start byte
+  Wire.write(0x02);     // make ready
+  Wire.write(0x23);
+  Wire.endTransmission(true);
 }
 
 //Continuous loop
 void loop() {
+  index=0;
+  Wire.requestFrom(slave_address, 32, true);
+  while (Wire.available())
+  {
+    readings[index] = Wire.read();
+    //Serial.print(readings[index] & 0xFF);
+    //Serial.print("\t");
+    index++;
+  }
+  state = readings[2];
+  Serial.print(state);
+  Serial.print(" ");
+  byte data[4];
+  data[0] = readings[3];
+  data[1] = readings[4];
+  data[2] = readings[5];
+  data[3] = readings[6];
+  timeReading = *((float*)(data));  
+  data[0] = readings[7];
+  data[1] = readings[8];
+  data[2] = readings[9];
+  data[3] = readings[10];
+  float acc1 = *((float*)(data));
+  data[0] = readings[11];
+  data[1] = readings[12];
+  data[2] = readings[13];
+  data[3] = readings[14];
+  float acc2 = *((float*)(data));
+  data[0] = readings[15];
+  data[1] = readings[16];
+  data[2] = readings[17];
+  data[3] = readings[18];
+  float acc3 = *((float*)(data));
+  float accAvg = (acc1 + acc2 + acc3)/3;
+  data[0] = readings[19];
+  data[1] = readings[20];
+  data[2] = readings[21];
+  data[3] = readings[22];
+  float newBrakeTemp = *((float*)(data));
+  data[0] = readings[23];
+  data[1] = readings[24];
+  data[2] = readings[25];
+  data[3] = readings[26];
+  float newPropTemp = *((float*)(data));  
+  data[0] = readings[27];
+  data[1] = readings[28];
+  data[2] = readings[29];
+  data[3] = readings[30];
+  float newBoardTemp = *((float*)(data));  
+  Serial.print(timeReading);
+  Serial.print(" ");
+  Serial.print(accAvg);
+  Serial.print(" ");
+  Serial.print(newBrakeTemp);
+  Serial.print(" ");  
+  Serial.print(newPropTemp);
+  Serial.print(" ");
+  Serial.println(newBoardTemp);
+    memcpy(acceleration, &acceleration[1], sizeof(acceleration) - sizeof(int));
+    acceleration[9] =  accAvg;
+    memcpy(brakeTemp, &brakeTemp[1], sizeof(brakeTemp) - sizeof(int));
+    brakeTemp[9] =  newBrakeTemp;
+    memcpy(propTemp, &propTemp[1], sizeof(propTemp) - sizeof(int));
+    propTemp[9] =  newPropTemp;
+    memcpy(boardTemp, &boardTemp[1], sizeof(boardTemp) - sizeof(int));
+    boardTemp[9] =  newBoardTemp;  
+
+  //get all three acceleration
+  //get average acceleration
+  //calculate velocity
+  //calculate distance
   
-  //Translate values over
-  GyZ[0] = GyZ[1];
-  GyZ[1] = GyZ[2];
-  updateGy(2);
-
-  //Reset values if user stopped
-  if(zeroCounter >= 35)
-  {
-    numFoGPeaks = 0;
-    zeroCounter = 0;
-  }
-  //Check for new island
-  if(GyZ[0] ==0 && GyZ[1] == 0 && GyZ[2] ==0)
-  {
-    newSection = true;
-  }
-  //Increment stopping counter
-  if(GyZ[2] == 0)
-  {
-    zeroCounter++;
-  }
-  else
-  {
-    zeroCounter = 0;
-  }
-  //Check for normal walking
-  if(GyZ[1] > 27500)
-  {
-    numFoGPeaks = 0;
-  }
-  else if(newSection && isMaxZ(GyZ) && isFoGZZero(GyZ[1]))
-  {
-    newSection = false;
-    numFoGPeaks++;
-    //Check for freezing
-    if(numFoGPeaks > 1)
-    {
-      //Turn motor on and LED
-      analogWrite(motorPin, 150);
-      digitalWrite(LED_BUILTIN, HIGH);
-      int motorCounter = 0;
-      //Check if motor should be turned off
-      while(GyZ[1] < 27500 && motorCounter < 1000)
-      {
-        GyZ[0] = GyZ[1];
-        GyZ[1] = GyZ[2];
-        updateGy(2);
-        motorCounter++;
-      }
-      analogWrite(motorPin, 0);
-      digitalWrite(LED_BUILTIN, LOW);
-      numFoGPeaks = 0;
-      zeroCounter = 0;
-    }
-  }
-  delay(10);
-}
-
-//Read new value and update array
-void updateGy(int pos)
-{
-  Wire.beginTransmission(MPU_addr);
-  Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU_addr,14,true);  // request a total of 14 registers
-  tempAcX=Wire.read()<<8|Wire.read();  // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)    
-  tempAcY=Wire.read()<<8|Wire.read();  // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
-  tempAcZ=Wire.read()<<8|Wire.read();  // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
-  Tmp=Wire.read()<<8|Wire.read();  // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
-  tempGyX=Wire.read()<<8|Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
-  tempGyY=Wire.read()<<8|Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
-  tempGyZ=Wire.read()<<8|Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
-  Serial.print(String(tempGyZ) + ", ");
-  if(tempGyZ <= 150)
-  {
-    tempGyZ = 0;
-  }
-  GyZ[pos] = tempGyZ;
-}
-
-//Method to check that there is a peak
-boolean isMaxZ(long values[])
-{
-  return (values[1] - values[0] > 500 && values[1] - values[2] > 500);
-}
-
-//Method to check that peak is in threshold region
-boolean isFoGZZero(long z)
-{
-  return (z > 2000 && z < 20000);
+  delay(20);
 }
