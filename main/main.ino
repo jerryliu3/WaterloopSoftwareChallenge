@@ -73,6 +73,8 @@ void loop() {
       index++;
     }
     state = readings[2];
+    //To convert the 4 byte arrays into float 32 bit values, they were cast directly into a float pointer to encompass all 4 bytes together
+    //and then de-referenced to get the actual float value stored inside the 4 bytes.
     byte data[4];
     data[0] = readings[3];
     data[1] = readings[4];
