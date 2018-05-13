@@ -1,5 +1,4 @@
 #include <ArduinoJson.h>
-#include <SimpleKalmanFilter.h>
 #include <Wire.h>
 #include <math.h>
 #include <Filters.h>
@@ -113,7 +112,7 @@ void loop() {
     float newBoardTemp = *((float*)(data)); 
      
     //Shift values over
-    memcpy(acceleration, &acceleration[1], sizeof(acceleration) - sizeof(int));
+    memcpy(acceleration, &acceleration[1], sizeof(acceleration) - sizeof(int)); //holding multiple values in memory not necessary; tobe removed.
     acceleration[9] =  accAvg;
     memcpy(brakeTemp, &brakeTemp[1], sizeof(brakeTemp) - sizeof(int));
     brakeTemp[9] =  newBrakeTemp;
@@ -125,7 +124,7 @@ void loop() {
     time_since_start_new = timeReading;
     newAcc = acceleration[9];
     lowpassFilter.input(newAcc);
-    float newAcc2 = newAcc;
+    float newAcc2 = newAcc; //did this with the variables just so you can access pre-filtered and filtered data for comparison. 
     newAcc = lowpassFilter.output();
     
     float dT= time_since_start_new-time_since_start_old;
@@ -138,7 +137,7 @@ void loop() {
     time_since_start_old = time_since_start_new;
     //Consider applying high pass filter. 
   
-    //Brake if 5000 km left.
+    //Brake if 3600 km left.
     if (!breaksToggled && totalDistance - newDist < 3600){
       Wire.beginTransmission(slave_address);
       Wire.write(0x56);  // start byte
@@ -171,7 +170,7 @@ void loop() {
     oldTime = millis();
     
   }
-  if(millis() - oldPrintTime >= 1000){
+  if(millis() - oldPrintTime >= 1000){ //print every second
     Serial.print(state);
     Serial.print("    ");
     Serial.print(newVel);
