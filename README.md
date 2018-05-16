@@ -12,3 +12,6 @@ Uses low pass filter from Arduino standard library to remove most noise.
 
 
 Uses double integration using trapezoidal approach for semi-accurate estimation of velocity and distance from acceleration.
+
+
+*Will be cleaned up to explain and only use one type of method for approximating velocity/distance and flow of the software*
